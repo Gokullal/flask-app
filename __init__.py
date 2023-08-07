@@ -70,6 +70,7 @@ with open('ixtoword.pkl', 'rb') as f:
 
 # Create a Flask app
 app = Flask(__name__)
+CORS(app)
 
 
 # Define your Flask route to process the image
