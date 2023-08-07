@@ -96,4 +96,4 @@ def process_image_route():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='20.117.165.14', port=5000)
