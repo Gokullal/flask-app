@@ -13,6 +13,20 @@ import requests
 from io import BytesIO
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import os
+import keras
+import keras.utils as image
+from keras.preprocessing.text import tokenizer_from_json
+from keras.utils import pad_sequences
+import matplotlib.pyplot as plt
+import tensorflow as tf
+import string
+import requests
+from PIL import Image
+from io import BytesIO
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
 
 # Enable detailed error messages
 cgitb.enable()
@@ -68,6 +82,57 @@ with open('wordtoix.pkl', 'rb') as f:
 with open('ixtoword.pkl', 'rb') as f:
     ixtoword = load(f)
 
+
+############## Semantic model ################
+
+
+def feature_extractions(directory, image_url):
+    model = tf.keras.applications.vgg16.VGG16()
+    model = keras.models.Model(inputs=model.input, outputs=model.layers[-2].output)
+    url= image_url
+    image_response = requests.get(url)
+    img = Image.open(BytesIO(image_response.content))
+    img = img.resize((224, 224))  # Resize the image to match the VGG16 input size
+    
+    arr = keras.utils.img_to_array(img, dtype=np.float32)
+    arr = arr.reshape((1, arr.shape[0], arr.shape[1], arr.shape[2]))
+    arr = keras.applications.vgg16.preprocess_input(arr)
+    
+    features = model.predict(arr, verbose=0)
+    return features
+def sample_caption(model, tokenizer, max_length, vocab_size, feature):
+    caption = "<startseq>"
+    while 1:
+        encoded = tokenizer.texts_to_sequences([caption])[0]
+        padded = pad_sequences([encoded], maxlen=max_length, padding='pre')[0]
+        padded = padded.reshape((1, max_length))
+        pred_Y = model.predict([feature, padded])[0,-1,:]
+        next_word = tokenizer.index_word[pred_Y.argmax()]
+        caption = caption + ' ' + next_word
+        if next_word == '<endseq>' or len(caption.split()) >= max_length:
+            break
+    caption = caption.replace('<startseq> ', '')
+    caption = caption.replace(' <endseq>', '')
+    return(caption)
+
+def funSemantic(image_url):
+    with open('./semantic/File1.json', 'r') as f:
+        tokenizer_json = json.load(f)
+    tokenizer = tokenizer_from_json(tokenizer_json)
+    model = keras.models.load_model("./semantic/File2.h5")
+    vocab_size = tokenizer.num_words
+    max_length = 37
+    img = image_url
+    features = feature_extractions("./semantic", img)
+    filename = "img1.jpg"  # This should be the filename or identifier of the image
+    # plt.figure()
+    caption = sample_caption(model, tokenizer, max_length, vocab_size, features)
+    img = tf.keras.utils.load_img("./semantic/" + filename)
+    return(caption)
+
+
+############## End Semantic model ################
+
 # Create a Flask app
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -89,9 +154,17 @@ def process_image_route():
     # Example usage for generating captions using greedy search
     pred = greedy_search(image, wordtoix, max_length)
 
-    # Create a dictionary to store the caption
-    result = {"caption": pred}
+    semantic_caption = funSemantic(image_url)
 
+
+
+
+
+
+
+
+    # Create a dictionary to store the caption
+    result = {"caption": pred,"semantic": semantic_caption}
     # Return the JSON response
     return jsonify(result)
 
